@@ -1,8 +1,9 @@
-'use client';
-import React, { useEffect, useRef, useCallback } from 'react';
-import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-import axios from 'axios';
+"use client";
+import React, { useEffect, useRef, useCallback } from "react";
+import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import axios from "axios";
+import { gsap } from "gsap";
 
 const Graph3D = ({ onNodeClick }) => {
   const mountRef = useRef(null);
@@ -17,7 +18,12 @@ const Graph3D = ({ onNodeClick }) => {
   // This useEffect initializes the scene, camera, renderer, and controls once on mount
   useEffect(() => {
     const scene = sceneRef.current;
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000
+    );
     cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -33,7 +39,8 @@ const Graph3D = ({ onNodeClick }) => {
     controls.enableZoom = true;
     controls.enablePan = true;
 
-    axios.get('http://127.0.0.1:5000/process_graph')
+    axios
+      .get("http://127.0.0.1:5000/process_graph")
       .then((response) => {
         const { nodes, edges } = response.data;
         const scalingFactor = 100;
@@ -44,12 +51,29 @@ const Graph3D = ({ onNodeClick }) => {
         nodes.forEach((node) => createNode(node, scene, scalingFactor));
         edges.forEach((edge) => createEdge(edge, scene, scalingFactor));
 
-        const centerX = (Math.max(...nodes.map((node) => node.x)) + Math.min(...nodes.map((node) => node.x))) / 2;
-        const centerY = (Math.max(...nodes.map((node) => node.y)) + Math.min(...nodes.map((node) => node.y))) / 2;
-        const centerZ = (Math.max(...nodes.map((node) => node.z)) + Math.min(...nodes.map((node) => node.z))) / 2;
+        const centerX =
+          (Math.max(...nodes.map((node) => node.x)) +
+            Math.min(...nodes.map((node) => node.x))) /
+          2;
+        const centerY =
+          (Math.max(...nodes.map((node) => node.y)) +
+            Math.min(...nodes.map((node) => node.y))) /
+          2;
+        const centerZ =
+          (Math.max(...nodes.map((node) => node.z)) +
+            Math.min(...nodes.map((node) => node.z))) /
+          2;
 
-        camera.position.set(centerX, centerY, 2 * Math.max(centerX, centerY, centerZ));
-        camera.lookAt(centerX, centerY, centerZ);
+        camera.position.set(
+        //   centerX,
+        //   centerY,
+        //   2 * Math.max(centerX, centerY, centerZ)
+        100,50,50
+        );
+        camera.lookAt(
+            // centerX, centerY, centerZ
+            100,50,50
+        );
 
         const animate = () => {
           requestAnimationFrame(animate);
@@ -63,16 +87,16 @@ const Graph3D = ({ onNodeClick }) => {
           camera.updateProjectionMatrix();
           renderer.setSize(window.innerWidth, window.innerHeight);
         };
-        window.addEventListener('resize', handleResize);
+        window.addEventListener("resize", handleResize);
 
         return () => {
-          window.removeEventListener('resize', handleResize);
-          mountRef.current.removeEventListener('click', handleMouseClick);
+          window.removeEventListener("resize", handleResize);
+          mountRef.current.removeEventListener("click", handleMouseClick);
           mountRef.current.removeChild(renderer.domElement);
         };
       })
       .catch((error) => {
-        console.error('Error fetching graph data:', error);
+        console.error("Error fetching graph data:", error);
       });
 
     // Cleanup when unmounting the component
@@ -84,37 +108,80 @@ const Graph3D = ({ onNodeClick }) => {
     };
   }, []); // Empty dependency array to run this effect only once on mount
 
+  const animateCameraToPosition = (targetPosition) => {
+    gsap.to(cameraRef.current.position, {
+      x: targetPosition.x,
+      y: targetPosition.y,
+      z: targetPosition.z,
+      duration: 2, // Adjust duration as needed
+      ease: "power2.out", // Choose an easing function for smooth deceleration
+      onUpdate: () => {
+        // Update camera rotation to look at the target node during animation
+        cameraRef.current.lookAt(targetPosition);
+      },
+    });
+  };
+
+  function calculateNewCameraFocus(clickedNodePosition) {
+    // Calculate the distance between the current camera position and the clicked node
+    const distanceToNode = cameraRef.current.position.distanceTo(clickedNodePosition);
+  
+    // Determine the desired zoom factor (adjust as needed)
+    const zoomFactor = 2; // A higher factor means a closer zoom
+  
+    // Calculate the new camera position
+    const newPosition = clickedNodePosition.clone().add(cameraRef.current.position.clone().sub(clickedNodePosition).normalize().multiplyScalar(distanceToNode / zoomFactor));
+  
+    // Calculate the new camera rotation
+    const newRotation = cameraRef.current.rotation.clone().setFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), clickedNodePosition.clone().sub(cameraRef.current.position).normalize()));
+  
+    return { newPosition, newRotation };
+  }
+
   // Memoize handleMouseClick to avoid re-creating it on each render
-  const handleMouseClick = useCallback((event) => {
-    if (!mountRef.current || !rendererRef.current) return;
+  const handleMouseClick = useCallback(
+    (event) => {
+      if (!mountRef.current || !rendererRef.current) return;
 
-    const rect = rendererRef.current.domElement.getBoundingClientRect();
-    mouseRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    mouseRef.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      const rect = rendererRef.current.domElement.getBoundingClientRect();
+      mouseRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouseRef.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-    raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
+      raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
 
-    const intersects = raycasterRef.current.intersectObjects(nodesRef.current);
+      const intersects = raycasterRef.current.intersectObjects(
+        nodesRef.current
+      );
 
-    if (intersects.length > 0) {
-      const intersectedObject = intersects[0].object;
-      console.log('Node clicked:', intersectedObject.userData);
-      onNodeClick(intersectedObject.userData); // Pass node data to parent component
+      if (intersects.length > 0) {
+        const intersectedObject = intersects[0].object;
+        console.log("Node clicked:", intersectedObject.userData);
+        onNodeClick(intersectedObject.userData); // Pass node data to parent component
 
-      // Example: You can log the data or update some other UI element with it
-      // onNodeClick should not trigger a re-render of this component
-    }
-  }, [onNodeClick]);
+        // Example: You can log the data or update some other UI element with it
+        // onNodeClick should not trigger a re-render of this component
+        // **New Code:**
+        const clickedNodePosition = intersectedObject.position;
+        // Calculate the new camera position and rotation
+        const { newPosition, newRotation } =
+          calculateNewCameraFocus(clickedNodePosition);
+
+        // Animate the camera to the new position and rotation
+        animateCameraToPosition(newPosition, newRotation);
+      }
+    },
+    [onNodeClick]
+  );
 
   useEffect(() => {
     // Attach event listeners for clicks once on mount
     if (mountRef.current) {
-      mountRef.current.addEventListener('click', handleMouseClick);
+      mountRef.current.addEventListener("click", handleMouseClick);
     }
 
     return () => {
       if (mountRef.current) {
-        mountRef.current.removeEventListener('click', handleMouseClick);
+        mountRef.current.removeEventListener("click", handleMouseClick);
       }
     };
   }, [handleMouseClick]); // Only re-run if handleMouseClick changes
@@ -122,7 +189,7 @@ const Graph3D = ({ onNodeClick }) => {
   const createNode = (node, scene, scalingFactor) => {
     const degree = node.degree_centrality || 1;
     const nodeSize = Math.log(degree + 1) * 0.15;
-    const color = node.color || '#ff0000';
+    const color = node.color || "#ff0000";
 
     const geometry = new THREE.SphereGeometry(nodeSize, 32, 32);
     const material = new THREE.MeshBasicMaterial({ color });
@@ -150,8 +217,12 @@ const Graph3D = ({ onNodeClick }) => {
     });
 
     const points = [
-      new THREE.Vector3(...edge.source_pos.map((coord) => coord * scalingFactor)),
-      new THREE.Vector3(...edge.target_pos.map((coord) => coord * scalingFactor)),
+      new THREE.Vector3(
+        ...edge.source_pos.map((coord) => coord * scalingFactor)
+      ),
+      new THREE.Vector3(
+        ...edge.target_pos.map((coord) => coord * scalingFactor)
+      ),
     ];
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
     const line = new THREE.Line(geometry, material);
@@ -160,7 +231,10 @@ const Graph3D = ({ onNodeClick }) => {
   };
 
   return (
-    <div ref={mountRef} className="w-full h-full flex items-center justify-center">
+    <div
+      ref={mountRef}
+      className="w-full h-full flex items-center justify-center"
+    >
       {/* Three.js canvas will be rendered here */}
     </div>
   );
