@@ -1,3 +1,4 @@
+"use client";
 import React from "react";
 import Navbar from "@/components/navbar";
 import Header from "@/components/header";
@@ -7,13 +8,12 @@ import Graph3D from "@/components/graph3D";
 
 const Homepage = () => {
   return (
-    <>
-      <Navbar></Navbar>
-      <Header></Header>
-      <ProjectCard></ProjectCard>
-      <Graph3D></Graph3D>
-      <Footer></Footer>
-    </>
+    <div className="flex flex-col h-screen">
+      <Navbar />
+      <Header />
+      <ProjectCard />
+      <Footer />
+    </div>
   );
 };
 
