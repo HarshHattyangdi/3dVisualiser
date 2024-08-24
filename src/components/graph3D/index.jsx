@@ -48,7 +48,21 @@ const Graph3D = ({ onNodeClick }) => {
         nodesRef.current.forEach((node) => scene.remove(node));
         nodesRef.current = [];
 
-        nodes.forEach((node) => createNode(node, scene, scalingFactor));
+        // Calculate maxDegree to be used in size scaling
+        const maxDegree = Math.max(...nodes.map((node) => node.degree_centrality));
+
+        // Define min and max sizes to match backend settings
+        const minSize = 5;
+        const maxSize = 20;
+
+        const getNodeSize = (degree, maxDegree) => {
+          return minSize + (degree / maxDegree) * (maxSize - minSize);
+        };
+
+        nodes.forEach((node) => {
+          const nodeSize = getNodeSize(node.degree_centrality, maxDegree);
+          createNode(node, scene, scalingFactor, nodeSize*0.02);
+        });
         edges.forEach((edge) => createEdge(edge, scene, scalingFactor));
 
         const centerX =
@@ -64,16 +78,8 @@ const Graph3D = ({ onNodeClick }) => {
             Math.min(...nodes.map((node) => node.z))) /
           2;
 
-        camera.position.set(
-        //   centerX,
-        //   centerY,
-        //   2 * Math.max(centerX, centerY, centerZ)
-        100,50,50
-        );
-        camera.lookAt(
-            // centerX, centerY, centerZ
-            100,50,50
-        );
+        camera.position.set(100, 50, 50);
+        camera.lookAt(100, 50, 50);
 
         const animate = () => {
           requestAnimationFrame(animate);
@@ -116,29 +122,19 @@ const Graph3D = ({ onNodeClick }) => {
       duration: 2, // Adjust duration as needed
       ease: "power2.out", // Choose an easing function for smooth deceleration
       onUpdate: () => {
-        // Update camera rotation to look at the target node during animation
         cameraRef.current.lookAt(targetPosition);
       },
     });
   };
 
   function calculateNewCameraFocus(clickedNodePosition) {
-    // Calculate the distance between the current camera position and the clicked node
     const distanceToNode = cameraRef.current.position.distanceTo(clickedNodePosition);
-  
-    // Determine the desired zoom factor (adjust as needed)
-    const zoomFactor = 2; // A higher factor means a closer zoom
-  
-    // Calculate the new camera position
+    const zoomFactor = 2;
     const newPosition = clickedNodePosition.clone().add(cameraRef.current.position.clone().sub(clickedNodePosition).normalize().multiplyScalar(distanceToNode / zoomFactor));
-  
-    // Calculate the new camera rotation
     const newRotation = cameraRef.current.rotation.clone().setFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), clickedNodePosition.clone().sub(cameraRef.current.position).normalize()));
-  
     return { newPosition, newRotation };
   }
 
-  // Memoize handleMouseClick to avoid re-creating it on each render
   const handleMouseClick = useCallback(
     (event) => {
       if (!mountRef.current || !rendererRef.current) return;
@@ -156,17 +152,11 @@ const Graph3D = ({ onNodeClick }) => {
       if (intersects.length > 0) {
         const intersectedObject = intersects[0].object;
         console.log("Node clicked:", intersectedObject.userData);
-        onNodeClick(intersectedObject.userData); // Pass node data to parent component
+        onNodeClick(intersectedObject.userData);
 
-        // Example: You can log the data or update some other UI element with it
-        // onNodeClick should not trigger a re-render of this component
-        // **New Code:**
         const clickedNodePosition = intersectedObject.position;
-        // Calculate the new camera position and rotation
-        const { newPosition, newRotation } =
-          calculateNewCameraFocus(clickedNodePosition);
+        const { newPosition, newRotation } = calculateNewCameraFocus(clickedNodePosition);
 
-        // Animate the camera to the new position and rotation
         animateCameraToPosition(newPosition, newRotation);
       }
     },
@@ -174,7 +164,6 @@ const Graph3D = ({ onNodeClick }) => {
   );
 
   useEffect(() => {
-    // Attach event listeners for clicks once on mount
     if (mountRef.current) {
       mountRef.current.addEventListener("click", handleMouseClick);
     }
@@ -184,13 +173,10 @@ const Graph3D = ({ onNodeClick }) => {
         mountRef.current.removeEventListener("click", handleMouseClick);
       }
     };
-  }, [handleMouseClick]); // Only re-run if handleMouseClick changes
+  }, [handleMouseClick]);
 
-  const createNode = (node, scene, scalingFactor) => {
-    const degree = node.degree_centrality || 1;
-    const nodeSize = Math.log(degree + 1) * 0.15;
-    const color = node.color || "#ff0000";
-
+  const createNode = (node, scene, scalingFactor, nodeSize) => {
+    const color = node.color || "#ff2e89";
     const geometry = new THREE.SphereGeometry(nodeSize, 32, 32);
     const material = new THREE.MeshBasicMaterial({ color });
     const sphere = new THREE.Mesh(geometry, material);
@@ -213,7 +199,7 @@ const Graph3D = ({ onNodeClick }) => {
       color: new THREE.Color(0xbbbbbb),
       linewidth: 1,
       transparent: true,
-      opacity: 0.1,
+      opacity: 0.08,
     });
 
     const points = [
