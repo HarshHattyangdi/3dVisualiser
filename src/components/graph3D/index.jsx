@@ -2,10 +2,9 @@
 import React, { useEffect, useRef, useCallback } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
-import axios from "axios";
 import { gsap } from "gsap";
 
-const Graph3D = ({ onNodeClick }) => {
+const Graph3D = ({ graphData,onNodeClick }) => {
   const mountRef = useRef(null);
   const sceneRef = useRef(new THREE.Scene());
   const raycasterRef = useRef(new THREE.Raycaster());
@@ -15,9 +14,10 @@ const Graph3D = ({ onNodeClick }) => {
   const rendererRef = useRef(null);
   const controlsRef = useRef(null);
 
-  // This useEffect initializes the scene, camera, renderer, and controls once on mount
   useEffect(() => {
     const scene = sceneRef.current;
+  
+    // Initialize the camera
     const camera = new THREE.PerspectiveCamera(
       75,
       window.innerWidth / window.innerHeight,
@@ -25,94 +25,97 @@ const Graph3D = ({ onNodeClick }) => {
       1000
     );
     cameraRef.current = camera;
-
+  
+    // Initialize the renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     rendererRef.current = renderer;
     mountRef.current.appendChild(renderer.domElement);
-
+  
+    // Initialize the controls
     const controls = new OrbitControls(camera, renderer.domElement);
     controlsRef.current = controls;
     controls.enableDamping = true;
     controls.dampingFactor = 0.25;
     controls.enableZoom = true;
     controls.enablePan = true;
-
-    axios
-      .get("http://127.0.0.1:5000/process_graph")
-      .then((response) => {
-        const { nodes, edges } = response.data;
-        const scalingFactor = 100;
-
-        nodesRef.current.forEach((node) => scene.remove(node));
-        nodesRef.current = [];
-
-        // Calculate maxDegree to be used in size scaling
-        const maxDegree = Math.max(...nodes.map((node) => node.degree_centrality));
-
-        // Define min and max sizes to match backend settings
-        const minSize = 5;
-        const maxSize = 20;
-
-        const getNodeSize = (degree, maxDegree) => {
-          return minSize + (degree / maxDegree) * (maxSize - minSize);
-        };
-
-        nodes.forEach((node) => {
-          const nodeSize = getNodeSize(node.degree_centrality, maxDegree);
-          createNode(node, scene, scalingFactor, nodeSize*0.02);
-        });
-        edges.forEach((edge) => createEdge(edge, scene, scalingFactor));
-
-        const centerX =
-          (Math.max(...nodes.map((node) => node.x)) +
-            Math.min(...nodes.map((node) => node.x))) /
-          2;
-        const centerY =
-          (Math.max(...nodes.map((node) => node.y)) +
-            Math.min(...nodes.map((node) => node.y))) /
-          2;
-        const centerZ =
-          (Math.max(...nodes.map((node) => node.z)) +
-            Math.min(...nodes.map((node) => node.z))) /
-          2;
-
-        camera.position.set(100, 50, 50);
-        camera.lookAt(100, 50, 50);
-
-        const animate = () => {
-          requestAnimationFrame(animate);
-          controls.update();
-          renderer.render(scene, camera);
-        };
-        animate();
-
-        const handleResize = () => {
-          camera.aspect = window.innerWidth / window.innerHeight;
-          camera.updateProjectionMatrix();
-          renderer.setSize(window.innerWidth, window.innerHeight);
-        };
-        window.addEventListener("resize", handleResize);
-
-        return () => {
-          window.removeEventListener("resize", handleResize);
-          mountRef.current.removeEventListener("click", handleMouseClick);
-          mountRef.current.removeChild(renderer.domElement);
-        };
-      })
-      .catch((error) => {
-        console.error("Error fetching graph data:", error);
-      });
-
-    // Cleanup when unmounting the component
-    return () => {
-      if (rendererRef.current) {
-        rendererRef.current.dispose();
-      }
-      mountRef.current.removeChild(renderer.domElement);
+  
+    // Animation loop
+    const animate = () => {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
     };
-  }, []); // Empty dependency array to run this effect only once on mount
+    animate();
+  
+    // Handle window resizing
+    const handleResize = () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    };
+    window.addEventListener("resize", handleResize);
+  
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      if (mountRef.current) {
+        mountRef.current.removeChild(renderer.domElement);
+      }
+    };
+  }, []);// Depend on graphData to update the scene
+
+  useEffect(() => {
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+  
+    // Early return if graphData is not available
+    if (!graphData || !camera) return;
+  
+    const { nodes, edges } = graphData; // Safe to destructure here
+    const scalingFactor = 100;
+  
+    // Clear existing nodes
+    nodesRef.current.forEach((node) => scene.remove(node));
+    nodesRef.current = [];
+  
+    // Calculate maxDegree to be used in size scaling
+    const maxDegree = Math.max(...nodes.map((node) => node.degree_centrality));
+  
+    // Define min and max sizes to match backend settings
+    const minSize = 5;
+    const maxSize = 20;
+  
+    const getNodeSize = (degree, maxDegree) => {
+      return minSize + (degree / maxDegree) * (maxSize - minSize);
+    };
+  
+    nodes.forEach((node) => {
+      const nodeSize = getNodeSize(node.degree_centrality, maxDegree);
+      createNode(node, scene, scalingFactor, nodeSize * 0.02);
+    });
+  
+    edges.forEach((edge) => createEdge(edge, scene, scalingFactor));
+  
+    // Center the camera based on nodes' position
+    const centerX =
+      (Math.max(...nodes.map((node) => node.x)) +
+        Math.min(...nodes.map((node) => node.x))) /
+      2;
+    const centerY =
+      (Math.max(...nodes.map((node) => node.y)) +
+        Math.min(...nodes.map((node) => node.y))) /
+      2;
+    const centerZ =
+      (Math.max(...nodes.map((node) => node.z)) +
+        Math.min(...nodes.map((node) => node.z))) /
+      2;
+  
+    camera.position.set(100, 50, 50);
+    camera.lookAt(new THREE.Vector3(centerX, centerY, centerZ));
+  
+  }, [graphData]); // Depend on graphData to update the scene
+   // Depend on graphData to update the scene
 
   const animateCameraToPosition = (targetPosition) => {
     gsap.to(cameraRef.current.position, {
