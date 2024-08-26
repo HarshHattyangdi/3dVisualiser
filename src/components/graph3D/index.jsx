@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { gsap } from "gsap";
 
-const Graph3D = ({ graphData,onNodeClick }) => {
+const Graph3D = ({ graphData, onNodeClick }) => {
   const mountRef = useRef(null);
   const sceneRef = useRef(new THREE.Scene());
   const raycasterRef = useRef(new THREE.Raycaster());
@@ -16,7 +16,7 @@ const Graph3D = ({ graphData,onNodeClick }) => {
 
   useEffect(() => {
     const scene = sceneRef.current;
-  
+
     // Initialize the camera
     const camera = new THREE.PerspectiveCamera(
       75,
@@ -25,14 +25,14 @@ const Graph3D = ({ graphData,onNodeClick }) => {
       1000
     );
     cameraRef.current = camera;
-  
+
     // Initialize the renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     rendererRef.current = renderer;
     mountRef.current.appendChild(renderer.domElement);
-  
+
     // Initialize the controls
     const controls = new OrbitControls(camera, renderer.domElement);
     controlsRef.current = controls;
@@ -40,7 +40,7 @@ const Graph3D = ({ graphData,onNodeClick }) => {
     controls.dampingFactor = 0.25;
     controls.enableZoom = true;
     controls.enablePan = true;
-  
+
     // Animation loop
     const animate = () => {
       requestAnimationFrame(animate);
@@ -48,7 +48,7 @@ const Graph3D = ({ graphData,onNodeClick }) => {
       renderer.render(scene, camera);
     };
     animate();
-  
+
     // Handle window resizing
     const handleResize = () => {
       camera.aspect = window.innerWidth / window.innerHeight;
@@ -56,47 +56,62 @@ const Graph3D = ({ graphData,onNodeClick }) => {
       renderer.setSize(window.innerWidth, window.innerHeight);
     };
     window.addEventListener("resize", handleResize);
-  
+
     return () => {
       window.removeEventListener("resize", handleResize);
       if (mountRef.current) {
         mountRef.current.removeChild(renderer.domElement);
       }
     };
-  }, []);// Depend on graphData to update the scene
+  }, []);
 
   useEffect(() => {
     const scene = sceneRef.current;
     const camera = cameraRef.current;
-  
-    // Early return if graphData is not available
+
     if (!graphData || !camera) return;
-  
-    const { nodes, edges } = graphData; // Safe to destructure here
+
+    const { nodes, edges } = graphData;
     const scalingFactor = 100;
-  
-    // Clear existing nodes
+
+    // Clear existing nodes and edges
     nodesRef.current.forEach((node) => scene.remove(node));
     nodesRef.current = [];
-  
+    scene.children.forEach((child) => {
+      if (child instanceof THREE.Line) {
+        scene.remove(child);
+      }
+    });
+
     // Calculate maxDegree to be used in size scaling
     const maxDegree = Math.max(...nodes.map((node) => node.degree_centrality));
-  
+
     // Define min and max sizes to match backend settings
     const minSize = 5;
     const maxSize = 20;
-  
+
     const getNodeSize = (degree, maxDegree) => {
       return minSize + (degree / maxDegree) * (maxSize - minSize);
     };
-  
+
+    // Create nodes and keep track of them
+    const nodeMap = new Map();
     nodes.forEach((node) => {
       const nodeSize = getNodeSize(node.degree_centrality, maxDegree);
-      createNode(node, scene, scalingFactor, nodeSize * 0.02);
+      const nodeObject = createNode(
+        node,
+        scene,
+        scalingFactor,
+        nodeSize * 0.02
+      );
+      nodeMap.set(node.id, nodeObject);
     });
-  
-    edges.forEach((edge) => createEdge(edge, scene, scalingFactor));
-  
+
+    // Create edges only if both nodes exist
+    edges.forEach((edge) => {
+      createEdge(edge, scene, scalingFactor, nodeMap);
+    });
+
     // Center the camera based on nodes' position
     const centerX =
       (Math.max(...nodes.map((node) => node.x)) +
@@ -110,12 +125,10 @@ const Graph3D = ({ graphData,onNodeClick }) => {
       (Math.max(...nodes.map((node) => node.z)) +
         Math.min(...nodes.map((node) => node.z))) /
       2;
-  
+
     camera.position.set(100, 50, 50);
     camera.lookAt(new THREE.Vector3(centerX, centerY, centerZ));
-  
-  }, [graphData]); // Depend on graphData to update the scene
-   // Depend on graphData to update the scene
+  }, [graphData]);
 
   const animateCameraToPosition = (targetPosition) => {
     gsap.to(cameraRef.current.position, {
@@ -131,11 +144,17 @@ const Graph3D = ({ graphData,onNodeClick }) => {
   };
 
   function calculateNewCameraFocus(clickedNodePosition) {
-    const distanceToNode = cameraRef.current.position.distanceTo(clickedNodePosition);
+    const distanceToNode =
+      cameraRef.current.position.distanceTo(clickedNodePosition);
     const zoomFactor = 2;
-    const newPosition = clickedNodePosition.clone().add(cameraRef.current.position.clone().sub(clickedNodePosition).normalize().multiplyScalar(distanceToNode / zoomFactor));
-    const newRotation = cameraRef.current.rotation.clone().setFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), clickedNodePosition.clone().sub(cameraRef.current.position).normalize()));
-    return { newPosition, newRotation };
+    const newPosition = clickedNodePosition.clone().add(
+      cameraRef.current.position
+        .clone()
+        .sub(clickedNodePosition)
+        .normalize()
+        .multiplyScalar(distanceToNode / zoomFactor)
+    );
+    return { newPosition };
   }
 
   const handleMouseClick = useCallback(
@@ -158,9 +177,9 @@ const Graph3D = ({ graphData,onNodeClick }) => {
         onNodeClick(intersectedObject.userData);
 
         const clickedNodePosition = intersectedObject.position;
-        const { newPosition, newRotation } = calculateNewCameraFocus(clickedNodePosition);
+        const { newPosition } = calculateNewCameraFocus(clickedNodePosition);
 
-        animateCameraToPosition(newPosition, newRotation);
+        animateCameraToPosition(newPosition);
       }
     },
     [onNodeClick]
@@ -195,28 +214,73 @@ const Graph3D = ({ graphData,onNodeClick }) => {
 
     scene.add(sphere);
     nodesRef.current.push(sphere);
+
+    return sphere;
   };
 
-  const createEdge = (edge, scene, scalingFactor) => {
-    const material = new THREE.LineBasicMaterial({
-      color: new THREE.Color(0xbbbbbb),
-      linewidth: 1,
-      transparent: true,
-      opacity: 0.08,
-    });
+  const createEdge = (edge, scene, scalingFactor, nodeMap) => {
+    const sourceNode = nodeMap.get(edge.source);
+    const targetNode = nodeMap.get(edge.target);
 
-    const points = [
-      new THREE.Vector3(
-        ...edge.source_pos.map((coord) => coord * scalingFactor)
-      ),
-      new THREE.Vector3(
-        ...edge.target_pos.map((coord) => coord * scalingFactor)
-      ),
-    ];
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    const line = new THREE.Line(geometry, material);
+    // Check if both nodes exist
+    if (!sourceNode || !targetNode) {
+      // Remove the edge if either source or target node is missing
 
-    scene.add(line);
+      const existingEdges = scene.children.filter(
+        (child) => child instanceof THREE.Line
+      );
+      existingEdges.forEach((existingEdge) => {
+        const existingEdgeGeometry = existingEdge.geometry;
+        const existingPoints = existingEdgeGeometry.attributes.position.array;
+
+        // Check if the existing edge connects the missing node
+        const sourceMatches =
+          existingPoints[0] === edge.source_pos[0] &&
+          existingPoints[1] === edge.source_pos[1] &&
+          existingPoints[2] === edge.source_pos[2];
+        const targetMatches =
+          existingPoints[0] === edge.target_pos[0] &&
+          existingPoints[1] === edge.target_pos[1] &&
+          existingPoints[2] === edge.target_pos[2];
+
+        if (sourceMatches || targetMatches) {
+          scene.remove(existingEdge);
+          return; // Exit the loop after finding a matching edge
+        }
+      });
+
+      return; // Skip edge creation if neither node exists
+    }
+
+    // Check if both nodes exist
+    if (sourceNode && targetNode) {
+      const material = new THREE.LineBasicMaterial({
+        color: new THREE.Color(0xbbbbbb),
+        linewidth: 1,
+        transparent: true,
+        opacity: 0.08,
+      });
+
+      // Convert position arrays to Vector3 objects
+      const sourcePosition = new THREE.Vector3(
+        sourceNode.position.x,
+        sourceNode.position.y,
+        sourceNode.position.z
+      );
+
+      const targetPosition = new THREE.Vector3(
+        targetNode.position.x,
+        targetNode.position.y,
+        targetNode.position.z
+      );
+
+      // Create the points for the edge line
+      const points = [sourcePosition, targetPosition];
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      const line = new THREE.Line(geometry, material);
+
+      scene.add(line);
+    }
   };
 
   return (

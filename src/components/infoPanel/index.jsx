@@ -25,7 +25,10 @@ const InformationPanel = ({ node,className }) => {
         <strong>Color:</strong> {node.color}
       </p>
       <p className="text-sm text-gray-700">
-        <strong>Position:</strong> x: {node.x}, y: {node.y}, z: {node.z}
+        <strong>Total Connections:</strong> {node.degree}
+      </p>
+      <p className="text-sm text-gray-700">
+        <strong>Spokes:</strong> {node.spokes}
       </p>
     </div>
   );
