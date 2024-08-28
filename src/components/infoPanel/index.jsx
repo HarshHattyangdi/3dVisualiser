@@ -28,7 +28,7 @@ const InformationPanel = ({ node,className }) => {
         <strong>Total Connections:</strong> {node.degree}
       </p>
       <p className="text-sm text-gray-700">
-        <strong>Spokes:</strong> {node.spokes}
+        <strong>Spokes:</strong> {node.spoke_count}
       </p>
     </div>
   );

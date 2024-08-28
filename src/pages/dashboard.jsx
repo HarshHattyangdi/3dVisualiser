@@ -9,7 +9,9 @@ const Dashboard = () => {
   const [selectedNode, setSelectedNode] = useState(null);
   const [threshold, setThreshold] = useState(0.1); // Default threshold value
   const [graphData, setGraphData] = useState(null);
+  const [originalGraphData, setOriginalGraphData] = useState(null); // For revert functionality
   const [loading, setLoading] = useState(false); // Loading state
+  const [simplified, setSimplified] = useState(false); // State to track if diagram is simplified
 
   const handleNodeClick = (node) => {
     setSelectedNode(node);
@@ -45,16 +47,12 @@ const Dashboard = () => {
     }
   };
 
-  const handleSimplifyDiagram = async () => {
-    setLoading(true); // Start loading
-    try {
-      // Add logic to simplify the diagram if needed
-      console.log("Simplify diagram");
-    } catch (error) {
-      console.error("Error simplifying diagram:", error);
-    } finally {
-      setLoading(false); // End loading
-    }
+  const handleSimplifyDiagram = () => {
+    setSimplified(true); // Set simplified state to true
+  };
+
+  const handleRevertDiagram = () => {
+    setSimplified(false); // Set simplified state to false
   };
 
   const fetchGraphData = async () => {
@@ -62,7 +60,9 @@ const Dashboard = () => {
     try {
       const response = await axios.get("http://127.0.0.1:5000/process_graph");
       if (response.status === 200) {
-        setGraphData(response.data);
+        const data = response.data;
+        setGraphData(data);
+        setOriginalGraphData(data); // Save original data
       } else {
         console.error("Error fetching graph data", response.statusText);
       }
@@ -72,7 +72,7 @@ const Dashboard = () => {
       setLoading(false); // End loading
     }
   };
-  
+
   useEffect(() => {
     // Initial data fetch
     fetchGraphData();
@@ -82,7 +82,11 @@ const Dashboard = () => {
     <div className="flex flex-col h-screen">
       <div className="flex-1 flex">
         <div className="w-3/4">
-          <Graph3D graphData={graphData} onNodeClick={handleNodeClick} />
+          <Graph3D
+            graphData={simplified ? graphData : originalGraphData}
+            onNodeClick={handleNodeClick}
+            simplified={simplified}
+          />
         </div>
         <div className="w-1/4 h-full bg-gray-100 p-4">
           <InformationPanel node={selectedNode} className="mb-4" />
@@ -142,8 +146,8 @@ const Dashboard = () => {
               disabled={loading}
             />
             <Button
-              label="Simplify Diagram"
-              onClick={handleSimplifyDiagram}
+              label={simplified ? "Revert Diagram" : "Simplify Diagram"}
+              onClick={simplified ? handleRevertDiagram : handleSimplifyDiagram}
               className={`${
                 loading ? "bg-green-300 cursor-not-allowed" : "bg-green-500 hover:bg-green-700"
               } text-white font-bold py-2 px-4 rounded w-full`}
