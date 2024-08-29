@@ -11,7 +11,7 @@ const Dashboard = () => {
   const [graphData, setGraphData] = useState(null);
   const [originalGraphData, setOriginalGraphData] = useState(null); // For revert functionality
   const [loading, setLoading] = useState(false); // Loading state
-  const [simplified, setSimplified] = useState(false); // State to track if diagram is simplified
+  const [isSimplified, setIsSimplified] = useState(false); // State to control simplification
 
   const handleNodeClick = (node) => {
     setSelectedNode(node);
@@ -47,12 +47,8 @@ const Dashboard = () => {
     }
   };
 
-  const handleSimplifyDiagram = () => {
-    setSimplified(true); // Set simplified state to true
-  };
-
-  const handleRevertDiagram = () => {
-    setSimplified(false); // Set simplified state to false
+  const toggleSimplifyDiagram = () => {
+    setIsSimplified((prev) => !prev);
   };
 
   const fetchGraphData = async () => {
@@ -83,9 +79,9 @@ const Dashboard = () => {
       <div className="flex-1 flex">
         <div className="w-3/4">
           <Graph3D
-            graphData={simplified ? graphData : originalGraphData}
+            graphData={graphData}
             onNodeClick={handleNodeClick}
-            simplified={simplified}
+            simplified={isSimplified}  // Pass the isSimplified state
           />
         </div>
         <div className="w-1/4 h-full bg-gray-100 p-4">
@@ -146,8 +142,8 @@ const Dashboard = () => {
               disabled={loading}
             />
             <Button
-              label={simplified ? "Revert Diagram" : "Simplify Diagram"}
-              onClick={simplified ? handleRevertDiagram : handleSimplifyDiagram}
+              label={isSimplified ? "Show Full Diagram" : "Simplify Diagram"}
+              onClick={toggleSimplifyDiagram}
               className={`${
                 loading ? "bg-green-300 cursor-not-allowed" : "bg-green-500 hover:bg-green-700"
               } text-white font-bold py-2 px-4 rounded w-full`}
